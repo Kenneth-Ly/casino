@@ -33,3 +33,15 @@ def test_blank_bet_returns_error():
     amount, error = validate_bet("", balance=50)
     assert amount is None
     assert error is not None
+
+
+def test_unicode_digit_returns_error():
+    amount, error = validate_bet("1²", balance=50)
+    assert amount is None
+    assert error is not None
+
+
+def test_oversized_digit_string_returns_error():
+    amount, error = validate_bet("9" * 5000, balance=50)
+    assert amount is None
+    assert error is not None
