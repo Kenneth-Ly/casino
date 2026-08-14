@@ -130,3 +130,72 @@ a:focus-visible, button:focus-visible, input:focus-visible {
   text-transform: uppercase;
   letter-spacing: 0.12em;
 }
+
+/* Slots panel */
+.panel {
+  background: var(--panel);
+  border: 1px solid rgba(51, 233, 255, 0.35);
+  border-radius: 10px;
+  padding: 1rem 1.2rem;
+}
+
+.balance {
+  color: var(--gold);
+  text-shadow: 0 0 8px rgba(255, 193, 59, 0.5);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.paytable {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.9rem;
+}
+
+.paytable th, .paytable td {
+  border: 1px solid rgba(51, 233, 255, 0.35);
+  padding: 0.4rem 0.8rem;
+  text-align: left;
+}
+
+.jackpot-row {
+  color: var(--gold);
+  text-shadow: 0 0 6px rgba(255, 193, 59, 0.5);
+  font-weight: bold;
+}
+
+.reels {
+  font-size: 1.5rem;
+  margin: 1rem 0;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+
+.message { color: var(--win); text-shadow: 0 0 6px rgba(57, 255, 106, 0.5); }
+.error { color: var(--marquee); text-shadow: 0 0 6px rgba(255, 77, 28, 0.5); }
+.busted { color: var(--marquee); text-shadow: 0 0 6px rgba(255, 77, 28, 0.5); font-weight: bold; }
+
+form { margin-top: 1rem; }
+
+input[type="text"] {
+  width: 4rem;
+  background: var(--ink);
+  color: #E8E3F5;
+  border: 1px solid rgba(51, 233, 255, 0.35);
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+}
+
+button {
+  background: var(--button);
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-weight: bold;
+  color: var(--ink);
+  box-shadow: 0 0 14px rgba(46, 124, 255, 0.5);
+}
+
+button:hover { box-shadow: 0 0 20px rgba(46, 124, 255, 0.7); }
