@@ -164,3 +164,76 @@ def apply_insurance(state, decision, balance):
 
     state["phase"] = "player_turn"
     return state, cost, 0
+
+
+from games.blackjack import MAX_SPLITS, dealer_should_hit
+
+
+def _hand_done(hand):
+    return hand.busted or hand.stood or hand.result == "charlie" or hand.from_split_aces
+
+
+def apply_action(state, action, balance):
+    if state["phase"] != "player_turn":
+        return state, 0, 0
+
+    hands = [hand_from_json(h) for h in state["hands"]]
+    dealer_cards = [card_from_json(c) for c in state["dealer_cards"]]
+    i = state["active_index"]
+    hand = hands[i]
+    cost = 0
+
+    if action == "hit":
+        hand.cards.append(draw_card())
+        value, _ = hand_value(hand.cards)
+        if value > 21:
+            hand.busted = True
+        elif len(hand.cards) >= 5:
+            hand.result = "charlie"
+            hand.stood = True
+    elif action == "stand":
+        hand.stood = True
+    elif action == "double":
+        if len(hand.cards) == 2 and balance >= hand.bet:
+            cost = hand.bet
+            hand.bet *= 2
+            hand.doubled = True
+            hand.cards.append(draw_card())
+            hand.stood = True
+            value, _ = hand_value(hand.cards)
+            if value > 21:
+                hand.busted = True
+    elif action == "split":
+        can_split = (
+            len(hand.cards) == 2
+            and hand.cards[0].rank == hand.cards[1].rank
+            and state["split_count"] < MAX_SPLITS
+            and balance >= hand.bet
+        )
+        if can_split:
+            cost = hand.bet
+            state["split_count"] += 1
+            is_ace_split = hand.cards[0].rank == 'A'
+            first_card, second_card = hand.cards[0], hand.cards[1]
+            hand.cards = [first_card, draw_card()]
+            hand.from_split_aces = is_ace_split
+            new_hand = Hand([second_card, draw_card()], hand.bet, from_split_aces=is_ace_split)
+            hands.insert(i + 1, new_hand)
+
+    while i < len(hands) and _hand_done(hands[i]):
+        i += 1
+
+    state["active_index"] = i
+    state["hands"] = [hand_to_json(h) for h in hands]
+    state["dealer_cards"] = [card_to_json(c) for c in dealer_cards]
+
+    if i >= len(hands):
+        any_live = any(not h.busted and h.result != "charlie" for h in hands)
+        if any_live:
+            while dealer_should_hit(dealer_cards):
+                dealer_cards.append(draw_card())
+            state["dealer_cards"] = [card_to_json(c) for c in dealer_cards]
+        resolved_state, winnings = _resolve(state, False)
+        return resolved_state, cost, winnings
+
+    return state, cost, 0

@@ -159,3 +159,135 @@ def test_apply_insurance_unaffordable_costs_nothing(monkeypatch):
     assert cost == 0
     assert state["insurance_bet"] == 0
     assert state["phase"] == "player_turn"
+
+
+def test_apply_action_hit_no_bust_stays_in_player_turn(monkeypatch):
+    _queue(monkeypatch, [
+        cards_mod.Card('5', 'H'), cards_mod.Card('4', 'S'),   # player 9
+        cards_mod.Card('9', 'D'), cards_mod.Card('7', 'C'),   # dealer 16
+        cards_mod.Card('2', 'H'),                              # hit card -> 11
+    ])
+    state, _ = blackjack_web.start_round(10)
+    state, cost, winnings = blackjack_web.apply_action(state, "hit", balance=100)
+    assert cost == 0
+    assert winnings == 0
+    assert state["phase"] == "player_turn"
+    assert len(state["hands"][0]["cards"]) == 3
+
+
+def test_apply_action_hit_bust_resolves_round(monkeypatch):
+    _queue(monkeypatch, [
+        cards_mod.Card('K', 'H'), cards_mod.Card('9', 'S'),   # player 19
+        cards_mod.Card('9', 'D'), cards_mod.Card('7', 'C'),   # dealer 16
+        cards_mod.Card('K', 'D'),                              # hit -> bust (29)
+    ])
+    state, _ = blackjack_web.start_round(10)
+    state, cost, winnings = blackjack_web.apply_action(state, "hit", balance=100)
+    assert cost == 0
+    assert winnings == 0
+    assert state["phase"] == "resolved"
+    assert state["hands"][0]["outcome"] == "bust"
+
+
+def test_apply_action_stand_dealer_plays_and_player_wins(monkeypatch):
+    _queue(monkeypatch, [
+        cards_mod.Card('K', 'H'), cards_mod.Card('9', 'S'),   # player 19
+        cards_mod.Card('9', 'D'), cards_mod.Card('2', 'C'),   # dealer 11, must hit
+        cards_mod.Card('6', 'H'),                              # dealer draws -> 17, stands (17 not < 17)
+    ])
+    state, _ = blackjack_web.start_round(10)
+    state, cost, winnings = blackjack_web.apply_action(state, "stand", balance=100)
+    assert cost == 0
+    assert state["phase"] == "resolved"
+    # dealer stood at 17, player's 19 wins
+    assert state["hands"][0]["outcome"] == "win"
+    assert winnings == 20  # bet back (10) + even-money win (10)
+
+
+def test_apply_action_double_costs_bet_and_deals_one_card(monkeypatch):
+    _queue(monkeypatch, [
+        cards_mod.Card('6', 'H'), cards_mod.Card('5', 'S'),   # player 11
+        cards_mod.Card('9', 'D'), cards_mod.Card('7', 'C'),   # dealer 16, must hit
+        cards_mod.Card('K', 'H'),                              # double card -> 21
+        cards_mod.Card('2', 'H'),                              # dealer's forced hit -> 18, stands
+    ])
+    state, _ = blackjack_web.start_round(10)
+    state, cost, winnings = blackjack_web.apply_action(state, "double", balance=100)
+    assert cost == 10  # matches original bet
+    assert state["hands"][0]["bet"] == 20
+    assert state["hands"][0]["doubled"] is True
+    assert len(state["hands"][0]["cards"]) == 3
+    assert state["phase"] == "resolved"  # doubling forces stand, dealer plays out
+
+
+def test_apply_action_double_unaffordable_does_nothing(monkeypatch):
+    _queue(monkeypatch, [
+        cards_mod.Card('6', 'H'), cards_mod.Card('5', 'S'),
+        cards_mod.Card('9', 'D'), cards_mod.Card('7', 'C'),
+    ])
+    state, _ = blackjack_web.start_round(10)
+    state, cost, winnings = blackjack_web.apply_action(state, "double", balance=5)
+    assert cost == 0
+    assert state["hands"][0]["bet"] == 10
+    assert state["phase"] == "player_turn"
+
+
+def test_apply_action_split_creates_second_hand(monkeypatch):
+    _queue(monkeypatch, [
+        cards_mod.Card('8', 'H'), cards_mod.Card('8', 'S'),   # player pair of 8s
+        cards_mod.Card('9', 'D'), cards_mod.Card('7', 'C'),   # dealer 16
+        cards_mod.Card('3', 'H'), cards_mod.Card('4', 'S'),   # split draw cards
+    ])
+    state, _ = blackjack_web.start_round(10)
+    state, cost, winnings = blackjack_web.apply_action(state, "split", balance=100)
+    assert cost == 10
+    assert len(state["hands"]) == 2
+    assert state["split_count"] == 1
+    assert state["active_index"] == 0  # still playing the first (now 2-card) hand
+    assert state["phase"] == "player_turn"
+
+
+def test_apply_action_split_aces_auto_advances_past_both_hands(monkeypatch):
+    _queue(monkeypatch, [
+        cards_mod.Card('A', 'H'), cards_mod.Card('A', 'S'),   # player pair of aces
+        cards_mod.Card('9', 'D'), cards_mod.Card('7', 'C'),   # dealer 16, must hit
+        cards_mod.Card('K', 'H'), cards_mod.Card('K', 'S'),   # one card each split-ace hand
+        cards_mod.Card('K', 'D'),                              # dealer's forced hit -> 26, busts
+    ])
+    state, _ = blackjack_web.start_round(10)
+    state, cost, winnings = blackjack_web.apply_action(state, "split", balance=100)
+    assert cost == 10
+    # both split-ace hands get exactly one card and are immediately done -> round resolves
+    assert state["phase"] == "resolved"
+    assert len(state["hands"][0]["cards"]) == 2
+    assert len(state["hands"][1]["cards"]) == 2
+
+
+def test_apply_action_5_card_charlie_auto_wins(monkeypatch):
+    _queue(monkeypatch, [
+        cards_mod.Card('2', 'H'), cards_mod.Card('2', 'S'),   # player 4
+        cards_mod.Card('9', 'D'), cards_mod.Card('7', 'C'),   # dealer 16
+        cards_mod.Card('2', 'D'),                              # hit -> 6
+        cards_mod.Card('2', 'C'),                              # hit -> 8
+        cards_mod.Card('2', 'H'),                              # hit -> 10, 5 cards, Charlie
+    ])
+    state, _ = blackjack_web.start_round(10)
+    state, _, _ = blackjack_web.apply_action(state, "hit", balance=100)
+    state, _, _ = blackjack_web.apply_action(state, "hit", balance=100)
+    state, cost, winnings = blackjack_web.apply_action(state, "hit", balance=100)
+    assert state["phase"] == "resolved"
+    assert winnings == 20  # 5-card Charlie pays the bet (bet * 2 returned)
+    assert state["hands"][0]["outcome"] == "charlie"
+
+
+def test_apply_action_wrong_phase_is_a_no_op(monkeypatch):
+    _queue(monkeypatch, [
+        cards_mod.Card('A', 'H'), cards_mod.Card('K', 'S'),   # player blackjack -> resolved immediately
+        cards_mod.Card('9', 'D'), cards_mod.Card('7', 'C'),
+    ])
+    state, _ = blackjack_web.start_round(10)
+    assert state["phase"] == "resolved"
+    state2, cost, winnings = blackjack_web.apply_action(state, "hit", balance=100)
+    assert cost == 0
+    assert winnings == 0
+    assert state2 == state
