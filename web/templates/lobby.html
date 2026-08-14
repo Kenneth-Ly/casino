@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Casino Lobby</h1>
+<h1>Lobby</h1>
 <p class="record">
   {% if record is not none %}
     All-time record: <strong>{{ record }} pts</strong>
@@ -8,7 +8,22 @@
     All-time record: unavailable
   {% endif %}
 </p>
-<ul class="game-list">
-  <li><a href="{{ url_for('slots_page') }}">Slot Machine</a></li>
-</ul>
+<div class="game-grid">
+  <a class="tile live" href="{{ url_for('slots_page') }}">
+    <div class="name">SLOTS</div>
+    <div class="sub">Play now</div>
+  </a>
+  <div class="tile soon">
+    <div class="name">BLACKJACK</div>
+    <div class="sub">Coming soon</div>
+  </div>
+  <div class="tile soon">
+    <div class="name">ROULETTE</div>
+    <div class="sub">Coming soon</div>
+  </div>
+  <div class="tile soon">
+    <div class="name">POKER</div>
+    <div class="sub">Coming soon</div>
+  </div>
+</div>
 {% endblock %}
