@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from flask import Flask, render_template, request, session
 
 from games import slots
-from web import db, validation
+from web import blackjack_web, db, validation
 
 load_dotenv()
 
@@ -28,6 +28,13 @@ def get_stats():
     return session.setdefault(
         "stats", {"plays": 0, "wagered": 0, "won": 0, "jackpots": 0}
     )
+
+
+def _maybe_update_record(balance):
+    try:
+        db.update_global_record(balance)
+    except Exception as exc:
+        app.logger.warning("global record update skipped: %s", type(exc).__name__)
 
 
 def render_panel(balance, error=None, reels=None, message=None):
@@ -84,10 +91,7 @@ def slots_spin():
     session["stats"] = stats
     session["balance"] = balance
 
-    try:
-        db.update_global_record(balance)
-    except Exception as exc:
-        app.logger.warning("global record update skipped: %s", type(exc).__name__)
+    _maybe_update_record(balance)
 
     if jackpot:
         message = f"JACKPOT! You won {win} pts!"
@@ -104,3 +108,84 @@ def slots_reset():
     session["balance"] = STARTING_BALANCE
     session["stats"] = {"plays": 0, "wagered": 0, "won": 0, "jackpots": 0}
     return render_panel(STARTING_BALANCE)
+
+
+def render_blackjack_table(balance, state, error=None):
+    return render_template(
+        "_blackjack_table.html",
+        balance=balance,
+        state=state,
+        error=error,
+        suit_symbol=blackjack_web.suit_symbol,
+        is_red_suit=blackjack_web.is_red_suit,
+        max_splits=blackjack_web.MAX_SPLITS,
+    )
+
+
+@app.route("/blackjack")
+def blackjack_page():
+    return render_template(
+        "blackjack.html",
+        balance=get_balance(),
+        state=session.get("blackjack"),
+        suit_symbol=blackjack_web.suit_symbol,
+        is_red_suit=blackjack_web.is_red_suit,
+        max_splits=blackjack_web.MAX_SPLITS,
+    )
+
+
+@app.route("/blackjack/deal", methods=["POST"])
+def blackjack_deal():
+    balance = get_balance()
+    amount, error = validation.validate_bet(request.form.get("bet", ""), balance)
+    if error:
+        return render_blackjack_table(balance, None, error=error)
+
+    balance -= amount
+    state, winnings = blackjack_web.start_round(amount)
+    balance += winnings
+    session["balance"] = balance
+    session["blackjack"] = state
+    if winnings:
+        _maybe_update_record(balance)
+    return render_blackjack_table(balance, state)
+
+
+@app.route("/blackjack/insurance", methods=["POST"])
+def blackjack_insurance():
+    balance = get_balance()
+    state = session.get("blackjack")
+    if not state:
+        return render_blackjack_table(balance, None)
+
+    decision = request.form.get("decision", "decline")
+    state, cost, winnings = blackjack_web.apply_insurance(state, decision, balance)
+    balance = balance - cost + winnings
+    session["balance"] = balance
+    session["blackjack"] = state
+    if winnings:
+        _maybe_update_record(balance)
+    return render_blackjack_table(balance, state)
+
+
+@app.route("/blackjack/action", methods=["POST"])
+def blackjack_action():
+    balance = get_balance()
+    state = session.get("blackjack")
+    if not state:
+        return render_blackjack_table(balance, None)
+
+    action = request.form.get("action", "")
+    state, cost, winnings = blackjack_web.apply_action(state, action, balance)
+    balance = balance - cost + winnings
+    session["balance"] = balance
+    session["blackjack"] = state
+    if winnings:
+        _maybe_update_record(balance)
+    return render_blackjack_table(balance, state)
+
+
+@app.route("/blackjack/next", methods=["POST"])
+def blackjack_next():
+    session.pop("blackjack", None)
+    return render_blackjack_table(get_balance(), None)

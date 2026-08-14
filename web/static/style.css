@@ -199,3 +199,38 @@ button {
 }
 
 button:hover { box-shadow: 0 0 20px rgba(46, 124, 255, 0.7); }
+
+/* Blackjack */
+.section-label {
+  color: var(--gold);
+  text-shadow: 0 0 8px rgba(255, 193, 59, 0.5);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin: 1.1rem 0 0.5rem;
+}
+
+.hand-row { display: flex; gap: 10px; align-items: flex-end; margin-bottom: 0.4rem; flex-wrap: wrap; }
+.hand-meta { color: #E8E3F5; font-size: 0.8rem; opacity: 0.85; margin-bottom: 0.5rem; }
+.active-tag { color: var(--gold); text-shadow: 0 0 6px rgba(255, 193, 59, 0.6); }
+
+.card {
+  width: 58px; height: 82px; border-radius: 7px; position: relative;
+  background: linear-gradient(160deg, #FBF7EE 0%, #F1EADA 100%);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  font-family: Georgia, 'Times New Roman', serif;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.card .corner { position: absolute; font-size: 13px; line-height: 1; font-weight: 700; text-align: center; }
+.card .corner.tl { top: 5px; left: 6px; }
+.card .corner.br { bottom: 5px; right: 6px; transform: rotate(180deg); }
+.card .pip { font-size: 26px; }
+.card.red { color: #B3122A; }
+.card.black { color: #1a1a1a; }
+
+.card.back {
+  background: repeating-linear-gradient(45deg, var(--panel), var(--panel) 4px, #1f1440 4px, #1f1440 8px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(51, 233, 255, 0.35), inset 0 0 0 3px var(--ink);
+}
+.card.back::after { content: "?"; color: var(--accent); text-shadow: 0 0 6px var(--accent); font-size: 22px; font-family: 'JetBrains Mono', monospace; }

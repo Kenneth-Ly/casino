@@ -1,0 +1,86 @@
+<div class="panel">
+  <p class="balance">Balance: {{ balance }} pts</p>
+
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  {% if not state %}
+  <form hx-post="{{ url_for('blackjack_deal') }}" hx-target="#game-panel" hx-swap="innerHTML">
+    <label>Bet (1-{{ balance }}): <input type="text" name="bet" value="1"></label>
+    <button type="submit">Deal</button>
+  </form>
+
+  {% else %}
+
+  <div class="section-label">Dealer</div>
+  <div class="hand-row">
+    {% for c in state.dealer_cards %}
+      {% if loop.index0 == 0 and state.phase != 'resolved' %}
+        <div class="card back"></div>
+      {% else %}
+        <div class="card {{ 'red' if is_red_suit(c[1]) else 'black' }}">
+          <div class="corner tl">{{ c[0] }}<br>{{ suit_symbol(c[1]) }}</div>
+          <div class="pip">{{ suit_symbol(c[1]) }}</div>
+          <div class="corner br">{{ c[0] }}<br>{{ suit_symbol(c[1]) }}</div>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  {% for hand in state.hands %}
+  <div class="section-label">
+    Your Hand {{ loop.index }}/{{ state.hands|length }}{% if state.phase == 'player_turn' and loop.index0 == state.active_index %} <span class="active-tag">&lt;--</span>{% endif %}
+  </div>
+  <div class="hand-row">
+    {% for c in hand.cards %}
+    <div class="card {{ 'red' if is_red_suit(c[1]) else 'black' }}">
+      <div class="corner tl">{{ c[0] }}<br>{{ suit_symbol(c[1]) }}</div>
+      <div class="pip">{{ suit_symbol(c[1]) }}</div>
+      <div class="corner br">{{ c[0] }}<br>{{ suit_symbol(c[1]) }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="hand-meta">
+    Bet: {{ hand.bet }}
+    {% if state.phase == 'resolved' %}
+      {% if hand.outcome == 'blackjack' %} | Blackjack! +{{ hand.bet * 3 // 2 }} pts
+      {% elif hand.outcome == 'charlie' %} | 5-Card Charlie! +{{ hand.bet }} pts
+      {% elif hand.outcome == 'bust' %} | Bust. -{{ hand.bet }} pts
+      {% elif hand.outcome == 'win' %} | Win! +{{ hand.bet }} pts
+      {% elif hand.outcome == 'push' %} | Push
+      {% elif hand.outcome == 'lose' %} | Lose. -{{ hand.bet }} pts
+      {% endif %}
+    {% elif hand.busted %} | BUST
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {% if state.phase == 'insurance_offer' %}
+  <p>Dealer shows an Ace. Buy insurance for {{ state.hands[0].bet // 2 }} pts?</p>
+  <form hx-post="{{ url_for('blackjack_insurance') }}" hx-target="#game-panel" hx-swap="innerHTML">
+    <button type="submit" name="decision" value="accept">Buy Insurance</button>
+    <button type="submit" name="decision" value="decline">No Thanks</button>
+  </form>
+  {% endif %}
+
+  {% if state.phase == 'player_turn' %}
+  {% set active = state.hands[state.active_index] %}
+  <form hx-post="{{ url_for('blackjack_action') }}" hx-target="#game-panel" hx-swap="innerHTML">
+    <button type="submit" name="action" value="hit">Hit</button>
+    <button type="submit" name="action" value="stand">Stand</button>
+    {% if active.cards|length == 2 and balance >= active.bet %}
+    <button type="submit" name="action" value="double">Double Down</button>
+    {% endif %}
+    {% if active.cards|length == 2 and active.cards[0][0] == active.cards[1][0] and state.split_count < max_splits and balance >= active.bet %}
+    <button type="submit" name="action" value="split">Split</button>
+    {% endif %}
+  </form>
+  {% endif %}
+
+  {% if state.phase == 'resolved' %}
+  <form hx-post="{{ url_for('blackjack_next') }}" hx-target="#game-panel" hx-swap="innerHTML">
+    <button type="submit">Play Another Hand</button>
+  </form>
+  {% endif %}
+
+  {% endif %}
+</div>
