@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Cmd Prompt Casino</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar"><a href="{{ url_for('lobby') }}" class="brand">Cmd Prompt Casino</a></header>
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>

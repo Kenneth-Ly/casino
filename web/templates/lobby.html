@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Casino Lobby</h1>
+<p class="record">
+  {% if record is not none %}
+    All-time record: <strong>{{ record }} pts</strong>
+  {% else %}
+    All-time record: unavailable
+  {% endif %}
+</p>
+<ul class="game-list">
+  <li><a href="{{ url_for('slots_page') }}">Slot Machine</a></li>
+</ul>
+{% endblock %}

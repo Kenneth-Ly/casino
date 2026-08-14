@@ -1,0 +1,17 @@
+body { background: #0b3d20; color: #f5e6c8; font-family: Georgia, serif; margin: 0; }
+.topbar { background: #062814; padding: 1rem 2rem; }
+.brand { color: #ffd700; text-decoration: none; font-weight: bold; font-size: 1.25rem; }
+main { max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+h1 { color: #ffd700; }
+.paytable { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+.paytable th, .paytable td { border: 1px solid #ffd700; padding: 0.4rem 0.8rem; text-align: left; }
+.jackpot-row { color: #ffd700; font-weight: bold; }
+.reels { font-size: 1.5rem; margin: 1rem 0; letter-spacing: 0.1em; }
+.message { color: #7CFC00; }
+.error { color: #ff6b6b; }
+.busted { color: #ff6b6b; font-weight: bold; }
+form { margin-top: 1rem; }
+input[type="text"] { width: 4rem; }
+button { background: #ffd700; border: none; padding: 0.5rem 1rem; cursor: pointer; font-weight: bold; }
+.game-list { list-style: none; padding: 0; }
+.game-list a { color: #ffd700; font-size: 1.1rem; }

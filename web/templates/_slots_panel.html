@@ -1,0 +1,31 @@
+<div class="panel">
+  <p class="balance">Balance: {{ balance }} pts</p>
+
+  <table class="paytable">
+    <tr><th>Symbols</th><th>Payout</th></tr>
+    {% for s in symbols %}
+    <tr{% if s.name == jackpot_symbol %} class="jackpot-row"{% endif %}>
+      <td>{{ s.name }} x3</td>
+      <td>{{ s.payout }}x{% if s.name == jackpot_symbol %} (JACKPOT){% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  {% if reels %}
+  <div class="reels">[ {{ reels[0] }} | {{ reels[1] }} | {{ reels[2] }} ]</div>
+  {% endif %}
+  {% if message %}<p class="message">{{ message }}</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  {% if balance > 0 %}
+  <form hx-post="{{ url_for('slots_spin') }}" hx-target="#game-panel" hx-swap="innerHTML">
+    <label>Bet (1-{{ balance }}): <input type="text" name="bet" value="1"></label>
+    <button type="submit">Spin</button>
+  </form>
+  {% else %}
+  <p class="busted">You're out of points!</p>
+  <form hx-post="{{ url_for('slots_reset') }}" hx-target="#game-panel" hx-swap="innerHTML">
+    <button type="submit">Reset to 50 pts</button>
+  </form>
+  {% endif %}
+</div>
