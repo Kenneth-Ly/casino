@@ -8,7 +8,7 @@ TABLE = "global_record"
 
 
 def get_connection():
-    return psycopg2.connect(os.environ["DATABASE_URL"])
+    return psycopg2.connect(os.environ["DATABASE_URL"], connect_timeout=5)
 
 
 def get_global_record(table=TABLE):
@@ -27,10 +27,12 @@ def update_global_record(balance, table=TABLE):
     try:
         with conn.cursor() as cur:
             cur.execute(
-                sql.SQL("UPDATE {} SET balance = %s WHERE balance < %s").format(
-                    sql.Identifier(table)
-                ),
-                (balance, balance),
+                sql.SQL(
+                    "INSERT INTO {table} (id, balance) VALUES (true, %s) "
+                    "ON CONFLICT (id) DO UPDATE SET balance = EXCLUDED.balance "
+                    "WHERE {table}.balance < EXCLUDED.balance"
+                ).format(table=sql.Identifier(table)),
+                (balance,),
             )
         conn.commit()
     finally:

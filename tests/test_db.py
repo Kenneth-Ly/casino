@@ -16,7 +16,10 @@ TEST_TABLE = "global_record_test"
 def reset_test_table():
     conn = psycopg2.connect(os.environ["DATABASE_URL"])
     with conn.cursor() as cur:
-        cur.execute(f"UPDATE {TEST_TABLE} SET balance = 50")
+        cur.execute(
+            f"INSERT INTO {TEST_TABLE} (id, balance) VALUES (true, 50) "
+            "ON CONFLICT (id) DO UPDATE SET balance = 50"
+        )
     conn.commit()
     conn.close()
     yield
@@ -35,3 +38,14 @@ def test_update_global_record_ignores_lower_value():
     db.update_global_record(75, table=TEST_TABLE)
     db.update_global_record(60, table=TEST_TABLE)
     assert db.get_global_record(table=TEST_TABLE) == 75
+
+
+def test_update_global_record_inserts_when_table_empty():
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    with conn.cursor() as cur:
+        cur.execute(f"DELETE FROM {TEST_TABLE}")
+    conn.commit()
+    conn.close()
+
+    db.update_global_record(60, table=TEST_TABLE)
+    assert db.get_global_record(table=TEST_TABLE) == 60

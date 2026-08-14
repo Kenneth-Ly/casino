@@ -46,7 +46,8 @@ def render_panel(balance, error=None, reels=None, message=None):
 def lobby():
     try:
         record = db.get_global_record()
-    except Exception:
+    except Exception as exc:
+        app.logger.warning("global record read skipped: %s", type(exc).__name__)
         record = None
     return render_template("lobby.html", record=record)
 
@@ -84,10 +85,9 @@ def slots_spin():
     session["balance"] = balance
 
     try:
-        if balance > db.get_global_record():
-            db.update_global_record(balance)
-    except Exception:
-        pass
+        db.update_global_record(balance)
+    except Exception as exc:
+        app.logger.warning("global record update skipped: %s", type(exc).__name__)
 
     if jackpot:
         message = f"JACKPOT! You won {win} pts!"
