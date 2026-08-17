@@ -77,6 +77,30 @@ def test_action_check_when_to_call_positive_is_rejected(monkeypatch):
     assert b"call or fold" in resp.data.lower() or b"must call" in resp.data.lower()
 
 
+def test_action_raise_out_of_bounds_amount_is_rejected(monkeypatch):
+    client = make_client(monkeypatch)
+    client.get("/poker")
+    monkeypatch.setattr(poker_web, "bot_decide_action", lambda p, to_call, board, pot: ("call", 0))
+    _fixed_deck(monkeypatch, TAIL)
+    client.post("/poker/buyin", data={"buy_in": "50"})
+    # Preflop, human (seat 0, not SB/BB in hand 1) owes the big blind with a
+    # full 50-pt stack and current_bet 0:
+    #   min_target = current_bet(0) + to_call(2) + BIG_BLIND(2) = 4
+    #   max_target = current_bet(0) + stack(50)                = 50
+    # 3 is one below the legal minimum -- the server must reject it, not
+    # silently clamp or accept a forged out-of-range raise.
+    resp = client.post("/poker/action", data={"action": "raise", "amount": "3"})
+    assert resp.status_code == 200
+    assert b"Enter a whole number between 4 and 50." in resp.data
+
+    with client.session_transaction() as sess:
+        state = sess["poker"]
+        assert state["hand"]["phase"] == "player_turn"
+        assert state["hand"]["to_act"][0] == 0
+        assert state["hand"]["players"][0]["current_bet"] == 0
+        assert state["table"]["players"][0]["stack"] == 50
+
+
 def test_full_hand_to_showdown_via_routes(monkeypatch):
     client = make_client(monkeypatch)
     client.get("/poker")
@@ -139,6 +163,9 @@ def test_next_hand_rebuys_broke_bot(monkeypatch):
     assert resp.status_code == 200
     with client.session_transaction() as sess:
         assert sess["poker"]["table"]["players"][1]["stack"] > 0
+        # Button started at 0 (table.button_idx default from start_table);
+        # one call to /poker/next-hand should advance it by exactly one seat.
+        assert sess["poker"]["table"]["button_idx"] == 1
 
 
 def test_cashout_credits_balance(monkeypatch):
