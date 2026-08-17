@@ -216,6 +216,9 @@ def roulette_bet():
     balance = get_balance()
     state = session.get("roulette") or roulette_web.fresh_state()
 
+    if state["phase"] != "betting":
+        return render_roulette_table(balance, state)
+
     remaining = roulette_web.remaining_balance(state, balance)
     amount, error = validation.validate_bet(request.form.get("amount", ""), remaining)
     if error:
@@ -233,6 +236,9 @@ def roulette_remove():
     balance = get_balance()
     state = session.get("roulette") or roulette_web.fresh_state()
 
+    if state["phase"] != "betting":
+        return render_roulette_table(balance, state)
+
     try:
         index = int(request.form.get("index", ""))
     except ValueError:
@@ -246,6 +252,12 @@ def roulette_remove():
 def roulette_spin():
     balance = get_balance()
     state = session.get("roulette") or roulette_web.fresh_state()
+
+    total_wager = sum(b["amount"] for b in state["bets"])
+    if total_wager > balance:
+        return render_roulette_table(
+            balance, state, error="Your balance changed — adjust your bets."
+        )
 
     state, total_wager, total_return = roulette_web.spin(state)
     balance = balance - total_wager + total_return
