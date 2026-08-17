@@ -178,3 +178,26 @@ def test_spin_with_balance_drift_does_not_go_negative(monkeypatch):
     with client.session_transaction() as sess:
         assert sess["balance"] == 5
         assert sess["roulette"]["phase"] == "betting"
+
+
+def test_zero_balance_shows_busted_state_instead_of_bet_form(monkeypatch):
+    client = make_client(monkeypatch)
+    client.get("/roulette")
+    with client.session_transaction() as sess:
+        sess["balance"] = 0
+    resp = client.get("/roulette")
+    assert resp.status_code == 200
+    assert b"You're out of points" in resp.data
+    assert b"Reset to 50 pts" in resp.data
+    assert b"Add Bet" not in resp.data
+
+
+def test_roulette_reset_restores_default_balance(monkeypatch):
+    client = make_client(monkeypatch)
+    client.get("/roulette")
+    with client.session_transaction() as sess:
+        sess["balance"] = 0
+    resp = client.post("/roulette/reset")
+    assert resp.status_code == 200
+    assert b"Balance: 50 pts" in resp.data
+    assert b"Add Bet" in resp.data

@@ -103,3 +103,26 @@ def test_action_with_no_round_in_session_does_not_crash(monkeypatch):
     client = make_client(monkeypatch)
     resp = client.post("/blackjack/action", data={"action": "hit"})
     assert resp.status_code == 200
+
+
+def test_zero_balance_shows_busted_state_instead_of_bet_form(monkeypatch):
+    client = make_client(monkeypatch)
+    client.get("/blackjack")
+    with client.session_transaction() as sess:
+        sess["balance"] = 0
+    resp = client.get("/blackjack")
+    assert resp.status_code == 200
+    assert b"You're out of points" in resp.data
+    assert b"Reset to 50 pts" in resp.data
+    assert b"Deal" not in resp.data
+
+
+def test_blackjack_reset_restores_default_balance(monkeypatch):
+    client = make_client(monkeypatch)
+    client.get("/blackjack")
+    with client.session_transaction() as sess:
+        sess["balance"] = 0
+    resp = client.post("/blackjack/reset")
+    assert resp.status_code == 200
+    assert b"Balance: 50 pts" in resp.data
+    assert b"Deal" in resp.data

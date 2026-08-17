@@ -191,6 +191,13 @@ def blackjack_next():
     return render_blackjack_table(get_balance(), None)
 
 
+@app.route("/blackjack/reset", methods=["POST"])
+def blackjack_reset():
+    session["balance"] = STARTING_BALANCE
+    session.pop("blackjack", None)
+    return render_blackjack_table(STARTING_BALANCE, None)
+
+
 def render_roulette_table(balance, state, error=None):
     return render_template(
         "_roulette_table.html",
@@ -272,6 +279,13 @@ def roulette_spin():
 def roulette_next():
     session["roulette"] = roulette_web.next_round()
     return render_roulette_table(get_balance(), session["roulette"])
+
+
+@app.route("/roulette/reset", methods=["POST"])
+def roulette_reset():
+    session["balance"] = STARTING_BALANCE
+    session.pop("roulette", None)
+    return render_roulette_table(STARTING_BALANCE, roulette_web.fresh_state())
 
 
 def render_poker_table(balance, state, error=None):
@@ -382,3 +396,10 @@ def poker_cashout():
     if payout:
         _maybe_update_record(balance)
     return render_poker_table(balance, None)
+
+
+@app.route("/poker/reset", methods=["POST"])
+def poker_reset():
+    session["balance"] = STARTING_BALANCE
+    session.pop("poker", None)
+    return render_poker_table(STARTING_BALANCE, None)

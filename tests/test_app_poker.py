@@ -203,3 +203,26 @@ def test_cashout_credits_balance(monkeypatch):
     with client.session_transaction() as sess:
         assert "poker" not in sess
         assert sess["balance"] != 0
+
+
+def test_zero_balance_shows_busted_state_instead_of_buyin_form(monkeypatch):
+    client = make_client(monkeypatch)
+    client.get("/poker")
+    with client.session_transaction() as sess:
+        sess["balance"] = 0
+    resp = client.get("/poker")
+    assert resp.status_code == 200
+    assert b"You're out of points" in resp.data
+    assert b"Reset to 50 pts" in resp.data
+    assert b"Buy In" not in resp.data
+
+
+def test_poker_reset_restores_default_balance(monkeypatch):
+    client = make_client(monkeypatch)
+    client.get("/poker")
+    with client.session_transaction() as sess:
+        sess["balance"] = 0
+    resp = client.post("/poker/reset")
+    assert resp.status_code == 200
+    assert b"Balance: 50 pts" in resp.data
+    assert b"Buy In" in resp.data

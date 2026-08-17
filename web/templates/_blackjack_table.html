@@ -4,10 +4,17 @@
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
   {% if not state %}
+  {% if balance > 0 %}
   <form hx-post="{{ url_for('blackjack_deal') }}" hx-target="#game-panel" hx-swap="innerHTML">
     <label>Bet (1-{{ balance }}): <input type="text" name="bet" value="1"></label>
     <button type="submit">Deal</button>
   </form>
+  {% else %}
+  <p class="busted">You're out of points!</p>
+  <form hx-post="{{ url_for('blackjack_reset') }}" hx-target="#game-panel" hx-swap="innerHTML">
+    <button type="submit">Reset to 50 pts</button>
+  </form>
+  {% endif %}
 
   {% else %}
 
