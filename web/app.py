@@ -299,6 +299,10 @@ def poker_page():
 @app.route("/poker/buyin", methods=["POST"])
 def poker_buyin():
     balance = get_balance()
+    state = session.get("poker")
+    if state:
+        return render_poker_table(balance, state)
+
     from games.poker import BIG_BLIND
     amount, error = validation.validate_bet(request.form.get("buy_in", ""), balance, min_bet=BIG_BLIND * 2)
     if error:

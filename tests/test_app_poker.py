@@ -55,6 +55,29 @@ def test_buyin_when_bots_act_before_human_shows_log(monkeypatch):
     assert b"folds" in resp.data.lower()
 
 
+def test_buyin_while_table_active_is_a_no_op(monkeypatch):
+    client = make_client(monkeypatch)
+    client.get("/poker")
+    monkeypatch.setattr(poker_web, "bot_decide_action", lambda p, to_call, board, pot: ("call", 0))
+    _fixed_deck(monkeypatch, TAIL)
+    client.post("/poker/buyin", data={"buy_in": "50"})
+
+    with client.session_transaction() as sess:
+        assert "poker" in sess
+        balance_before = sess["balance"]
+        stack_before = sess["poker"]["table"]["players"][0]["stack"]
+
+    # Stale tab / double-click / back-button resubmit: a second buy-in POST
+    # while a table is already active must be a complete no-op -- it must
+    # not touch the balance or overwrite the existing table/stack.
+    resp = client.post("/poker/buyin", data={"buy_in": "50"})
+    assert resp.status_code == 200
+
+    with client.session_transaction() as sess:
+        assert sess["balance"] == balance_before
+        assert sess["poker"]["table"]["players"][0]["stack"] == stack_before
+
+
 def test_action_fold(monkeypatch):
     client = make_client(monkeypatch)
     client.get("/poker")

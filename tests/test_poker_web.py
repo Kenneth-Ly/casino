@@ -347,19 +347,42 @@ def test_advance_full_hand_to_showdown_clear_winner(monkeypatch):
 
 
 def test_advance_all_but_one_all_in_runs_out_board_automatically(monkeypatch):
+    # Uneven stacks: You/Tex/Lucy are deep (30 each), Cal is a short stack
+    # (12). When everyone shoves, contributions land at two different
+    # levels (12 and 30), so build_pots() must split into a main pot (all
+    # four players eligible) plus a side pot (only the three deep stacks
+    # eligible -- Cal can't win chips beyond what he put in).
+    #
+    # Hole cards are rigged so hand strength is fully deterministic and
+    # strictly ordered: Cal > You > Tex > Lucy. Board = K D, Q D, J C, 10 S,
+    # 8 H (no flush possible; only Cal has a card that completes a straight).
+    #   Cal:  A S, A H -> A-K-Q-J-10 straight (best hand at the table)
+    #   You:  K H, Q H -> two pair, Kings and Queens (second-best)
+    #   Tex:  3 C, 3 D -> pair of Threes (third)
+    #   Lucy: 2 C, 2 D -> pair of Twos (worst)
+    #
+    # Cal, with the best hand overall, is only eligible for the main pot
+    # (capped at his 12-chip contribution) -- he must NOT win any of the
+    # side pot. You, the best hand among the three deep stacks, wins the
+    # side pot outright. If build_pots() mis-treated this as a single pot,
+    # Cal (best hand overall) would scoop the entire 102-chip pot instead.
     tail = [
-        cards.Card('A', 'S'), cards.Card('A', 'H'),
-        cards.Card('2', 'D'), cards.Card('3', 'D'),
-        cards.Card('4', 'C'), cards.Card('5', 'C'),
-        cards.Card('6', 'H'), cards.Card('7', 'H'),
-        cards.Card('9', 'S'),
-        cards.Card('K', 'D'), cards.Card('Q', 'D'), cards.Card('J', 'C'),
-        cards.Card('8', 'S'),
-        cards.Card('2', 'S'),
-        cards.Card('7', 'S'),
-        cards.Card('3', 'S'),
+        cards.Card('K', 'H'), cards.Card('Q', 'H'),   # You
+        cards.Card('3', 'C'), cards.Card('3', 'D'),   # Tex
+        cards.Card('2', 'C'), cards.Card('2', 'D'),   # Lucy
+        cards.Card('A', 'S'), cards.Card('A', 'H'),   # Cal
+        cards.Card('4', 'H'),                          # burn (preflop->flop)
+        cards.Card('K', 'D'), cards.Card('Q', 'D'), cards.Card('J', 'C'),  # flop
+        cards.Card('5', 'D'),                          # burn
+        cards.Card('10', 'S'),                         # turn
+        cards.Card('6', 'C'),                          # burn
+        cards.Card('8', 'H'),                          # river
     ]
-    state = _state_from_deal(monkeypatch, tail)
+    _fixed_deck(monkeypatch, tail)
+    table = poker_web.start_table(30)
+    table["players"][3]["stack"] = 12  # Cal -- short stack, forces a side pot
+    hand = poker_web.deal_new_hand(table)
+    state = {"table": table, "hand": hand}
 
     def bot_policy(p, to_call, board, pot):
         return ("allin", p.current_bet + p.stack)
@@ -378,5 +401,10 @@ def test_advance_all_but_one_all_in_runs_out_board_automatically(monkeypatch):
         state = poker_web.advance(state)
     assert state["hand"]["phase"] == "resolved"
     assert len(state["hand"]["board"]) == 5
-    total_stacks = sum(p["stack"] for p in state["table"]["players"])
-    assert total_stacks == 200
+
+    stacks = [p["stack"] for p in state["table"]["players"]]
+    assert sum(stacks) == 30 + 30 + 30 + 12  # chip-conservation
+
+    # Main pot (48 = 12 x 4, all eligible) -> Cal (best hand overall).
+    # Side pot (54 = 18 x 3, You/Tex/Lucy eligible) -> You (best of that trio).
+    assert stacks == [54, 0, 0, 48]
