@@ -47,3 +47,27 @@ def remove_bet(state, index):
     if 0 <= index < len(state["bets"]):
         state["bets"].pop(index)
     return state
+
+
+def spin(state):
+    if state["phase"] != "betting" or not state["bets"]:
+        return state, 0, 0
+
+    total_wager = sum(b["amount"] for b in state["bets"])
+    pocket = random.choice(roulette.POCKETS)
+    color = roulette.pocket_color(pocket)
+
+    total_return = 0
+    for b in state["bets"]:
+        win = b["amount"] * roulette.evaluate_bet(b, pocket)
+        b["win"] = win
+        total_return += win
+
+    state["pocket"] = pocket
+    state["color"] = color
+    state["phase"] = "resolved"
+    return state, total_wager, total_return
+
+
+def next_round():
+    return fresh_state()
