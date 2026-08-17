@@ -1,6 +1,6 @@
 """Session-state glue between games/poker.py's pure logic and the Flask web app."""
 import cards
-from games.poker import Player, SMALL_BLIND, BIG_BLIND, apply_action, bot_decide_action
+from games.poker import Player, SMALL_BLIND, BIG_BLIND, apply_action, bot_decide_action, best_hand, build_pots
 
 SEATS = [
     {"name": "You", "is_bot": False, "personality": None},
@@ -179,3 +179,111 @@ def apply_human_action(players, hand, action, amount):
     hand["current_max_bet"] = new_max
     if raised:
         _reset_to_act_after_raise(hand, players, 0)
+
+
+def _players_from_state(state):
+    players = []
+    for tp, hp in zip(state["table"]["players"], state["hand"]["players"]):
+        p = Player(tp["name"], tp["stack"], is_bot=tp["is_bot"], personality=tp["personality"])
+        p.hole = [card_from_json(c) for c in hp["hole"]]
+        p.current_bet = hp["current_bet"]
+        p.total_committed = hp["total_committed"]
+        p.folded = hp["folded"]
+        p.all_in = hp["all_in"]
+        p.showdown_score = hp["showdown_score"]
+        players.append(p)
+    return players
+
+
+def _write_back_state(state, players):
+    for i, p in enumerate(players):
+        state["table"]["players"][i]["stack"] = p.stack
+        state["hand"]["players"][i] = _player_hand_to_json(p)
+    return state
+
+
+def _award_uncontested_pot(players):
+    winner = next(p for p in players if not p.folded)
+    pot = sum(p.total_committed for p in players)
+    winner.stack += pot
+
+
+def _resolve_showdown(players, board):
+    contenders = [p for p in players if not p.folded]
+    for p in contenders:
+        score, _ = best_hand(p.hole + board)
+        p.showdown_score = score
+
+    for pot in build_pots(players):
+        eligible = pot["eligible"]
+        best_score = max(p.showdown_score for p in eligible)
+        winners = [p for p in eligible if p.showdown_score == best_score]
+        share = pot["amount"] // len(winners)
+        remainder = pot["amount"] - share * len(winners)
+        for idx, w in enumerate(winners):
+            w.stack += share + (remainder if idx == 0 else 0)
+
+
+def _deal_next_street(players, hand):
+    deck = [card_from_json(c) for c in hand["deck"]]
+    board = [card_from_json(c) for c in hand["board"]]
+
+    deck.pop()  # burn
+    if hand["street"] == "preflop":
+        board.extend([deck.pop() for _ in range(3)])
+        hand["street"] = "flop"
+    elif hand["street"] == "flop":
+        board.append(deck.pop())
+        hand["street"] = "turn"
+    elif hand["street"] == "turn":
+        board.append(deck.pop())
+        hand["street"] = "river"
+
+    hand["deck"] = [card_to_json(c) for c in deck]
+    hand["board"] = [card_to_json(c) for c in board]
+
+    for p in players:
+        p.current_bet = 0
+    hand["current_max_bet"] = 0
+
+    n = len(players)
+    sb_idx = hand["sb_idx"]
+    order = [(sb_idx + i) % n for i in range(n)]
+    hand["order"] = order
+    hand["to_act"] = _to_act_from_order(order, players)
+
+    return board
+
+
+def advance(state, action=None, amount=None):
+    players = _players_from_state(state)
+    hand = state["hand"]
+    board = [card_from_json(c) for c in hand["board"]]
+    hand["log"] = []
+
+    if action is not None:
+        apply_human_action(players, hand, action, amount)
+
+    while True:
+        _run_betting_round(players, hand, board)
+
+        if hand["to_act"]:
+            break  # paused for the human
+
+        active = [p for p in players if not p.folded]
+        if len(active) <= 1:
+            _award_uncontested_pot(players)
+            hand["phase"] = "resolved"
+            break
+
+        if hand["street"] == "river":
+            _resolve_showdown(players, board)
+            hand["phase"] = "resolved"
+            break
+
+        board = _deal_next_street(players, hand)
+        # loop continues: the new street's to_act may start with bots, the
+        # human, or be empty again (an all-in runout) -- all handled above.
+
+    _write_back_state(state, players)
+    return state

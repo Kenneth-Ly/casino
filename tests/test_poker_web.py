@@ -249,3 +249,134 @@ def test_apply_human_action_allin_computes_amount_serverside():
     assert players[0].stack == 0
     assert players[0].all_in is True
     assert hand["current_max_bet"] == 50
+
+
+def _state_from_deal(monkeypatch, tail_cards, button_idx=0):
+    _fixed_deck(monkeypatch, tail_cards)
+    table = poker_web.start_table(50)
+    table["button_idx"] = button_idx
+    hand = poker_web.deal_new_hand(table)
+    return {"table": table, "hand": hand}
+
+
+def test_advance_hand_resolves_preflop_by_foldout(monkeypatch):
+    tail = [cards.Card(r, 'S') for r in ['A', 'K', 'Q', 'J', '10', '9', '8', '7']]
+    state = _state_from_deal(monkeypatch, tail)  # order preflop: [3, 0, 1, 2]
+    monkeypatch.setattr(poker_web, "bot_decide_action", lambda p, to_call, board, pot: ("fold", 0))
+    state = poker_web.advance(state)  # Cal (3) folds, then it's the human's turn
+    assert state["hand"]["phase"] == "player_turn"
+    assert state["hand"]["to_act"] == [0, 1, 2]
+    state = poker_web.advance(state, "fold", None)
+    # human folds too -- Tex (1) and Lucy (2) still to act; Tex folds, only Lucy left -> uncontested
+    assert state["hand"]["phase"] == "resolved"
+    # Lucy (bb, contributed 2) wins the pot: sb(1) + bb(2) = 3 total committed
+    assert state["table"]["players"][2]["stack"] == 50 - 2 + 3
+
+
+def test_advance_deals_next_street_when_betting_round_completes(monkeypatch):
+    tail = [
+        cards.Card('A', 'S'), cards.Card('K', 'S'),
+        cards.Card('Q', 'S'), cards.Card('J', 'S'),
+        cards.Card('10', 'S'), cards.Card('9', 'S'),
+        cards.Card('8', 'S'), cards.Card('7', 'S'),
+        cards.Card('6', 'S'),                          # burn
+        cards.Card('5', 'S'), cards.Card('4', 'S'), cards.Card('3', 'S'),  # flop
+    ]
+    state = _state_from_deal(monkeypatch, tail)
+
+    def bot_policy(p, to_call, board, pot):
+        return ("call", 0) if to_call > 0 else ("check", 0)
+
+    monkeypatch.setattr(poker_web, "bot_decide_action", bot_policy)
+
+    guard = 0
+    while state["hand"]["street"] == "preflop":
+        guard += 1
+        assert guard < 20, "preflop betting round never closed"
+        if state["hand"]["to_act"] and state["hand"]["to_act"][0] == 0:
+            to_call = state["hand"]["current_max_bet"] - state["hand"]["players"][0]["current_bet"]
+            action = "call" if to_call > 0 else "check"
+            state = poker_web.advance(state, action, None)
+        else:
+            state = poker_web.advance(state)
+
+    assert state["hand"]["street"] == "flop"
+    assert len(state["hand"]["board"]) == 3
+    assert all(p["current_bet"] == 0 for p in state["hand"]["players"])
+
+
+def test_advance_full_hand_to_showdown_clear_winner(monkeypatch):
+    # Everyone checks/calls every street -- deterministic bot policy -- hand goes to showdown.
+    tail = [
+        cards.Card('A', 'S'), cards.Card('A', 'H'),   # You: pocket rockets
+        cards.Card('2', 'D'), cards.Card('3', 'D'),   # Tex
+        cards.Card('4', 'C'), cards.Card('5', 'C'),   # Lucy
+        cards.Card('6', 'H'), cards.Card('7', 'H'),   # Cal
+        cards.Card('9', 'S'),                          # burn (preflop->flop)
+        cards.Card('K', 'D'), cards.Card('Q', 'D'), cards.Card('J', 'C'),  # flop
+        cards.Card('8', 'S'),                          # burn
+        cards.Card('10', 'S'),                         # turn -- completes You's broadway straight
+        cards.Card('7', 'S'),                          # burn
+        cards.Card('8', 'H'),                          # river -- doesn't pair/connect anyone else's hole cards
+    ]
+    state = _state_from_deal(monkeypatch, tail)
+
+    def bot_policy(p, to_call, board, pot):
+        return ("call", 0) if to_call > 0 else ("check", 0)
+
+    monkeypatch.setattr(poker_web, "bot_decide_action", bot_policy)
+
+    # Drive the whole hand: whenever it's the human's turn, check/call; otherwise let bots auto-play.
+    guard = 0
+    while state["hand"]["phase"] != "resolved":
+        guard += 1
+        assert guard < 50, "hand never resolved -- infinite loop"
+        if state["hand"]["to_act"] and state["hand"]["to_act"][0] == 0:
+            to_call = state["hand"]["current_max_bet"] - state["hand"]["players"][0]["current_bet"]
+            action = "call" if to_call > 0 else "check"
+            state = poker_web.advance(state, action, None)
+        else:
+            state = poker_web.advance(state)
+
+    assert state["hand"]["street"] == "river"
+    assert len(state["hand"]["board"]) == 5
+    # Pocket aces beats everything else dealt here -- You must win the whole pot.
+    assert state["table"]["players"][0]["stack"] > 50 - 2  # net winner (started as sb-ish net payer, ends up up)
+    total_stacks = sum(p["stack"] for p in state["table"]["players"])
+    assert total_stacks == 200  # chip-conservation: 4 * 50 buy-in, nothing created or destroyed
+
+
+def test_advance_all_but_one_all_in_runs_out_board_automatically(monkeypatch):
+    tail = [
+        cards.Card('A', 'S'), cards.Card('A', 'H'),
+        cards.Card('2', 'D'), cards.Card('3', 'D'),
+        cards.Card('4', 'C'), cards.Card('5', 'C'),
+        cards.Card('6', 'H'), cards.Card('7', 'H'),
+        cards.Card('9', 'S'),
+        cards.Card('K', 'D'), cards.Card('Q', 'D'), cards.Card('J', 'C'),
+        cards.Card('8', 'S'),
+        cards.Card('2', 'S'),
+        cards.Card('7', 'S'),
+        cards.Card('3', 'S'),
+    ]
+    state = _state_from_deal(monkeypatch, tail)
+
+    def bot_policy(p, to_call, board, pot):
+        return ("allin", p.current_bet + p.stack)
+
+    monkeypatch.setattr(poker_web, "bot_decide_action", bot_policy)
+
+    # Human calls the all-ins with their own stack (also effectively all-in via a call).
+    state = poker_web.advance(state)  # Cal (order[0]) goes all-in preflop, reopening to everyone
+    while state["hand"]["phase"] != "resolved" and state["hand"]["to_act"] and state["hand"]["to_act"][0] == 0:
+        state = poker_web.advance(state, "allin", None)
+    # Once everyone's all-in, advance() must run the board out to showdown without any further pauses.
+    guard = 0
+    while state["hand"]["phase"] != "resolved":
+        guard += 1
+        assert guard < 10
+        state = poker_web.advance(state)
+    assert state["hand"]["phase"] == "resolved"
+    assert len(state["hand"]["board"]) == 5
+    total_stacks = sum(p["stack"] for p in state["table"]["players"])
+    assert total_stacks == 200
