@@ -1,0 +1,53 @@
+<div class="panel">
+  <p class="balance">Balance: {{ balance }} pts</p>
+
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  {% if state.phase == 'resolved' %}
+  <p class="result">Ball lands on {{ state.pocket }} ({{ state.color|upper }})</p>
+  {% endif %}
+
+  {% if state.bets %}
+  <div class="section-label">Bet Slip</div>
+  {% for bet in state.bets %}
+  <div class="bet-line">
+    <span>{{ bet.label }}{% if bet.value %} ({{ bet.value }}){% endif %} - {{ bet.amount }} pts</span>
+    {% if state.phase == 'resolved' %}
+      {% if bet.win > 0 %}<span class="bet-win">+{{ bet.win }} pts</span>{% else %}<span class="bet-lose">-{{ bet.amount }} pts</span>{% endif %}
+    {% else %}
+    <form hx-post="{{ url_for('roulette_remove') }}" hx-target="#game-panel" hx-swap="innerHTML">
+      <input type="hidden" name="index" value="{{ loop.index0 }}">
+      <button type="submit">Remove</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if state.phase == 'betting' %}
+  <form hx-post="{{ url_for('roulette_bet') }}" hx-target="#game-panel" hx-swap="innerHTML">
+    <label>Bet type:
+      <select name="bet_type">
+        {% for label, type in bet_menu %}
+        <option value="{{ type }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Straight number (0-36 or 00): <input type="text" name="number"></label>
+    <label>Amount: <input type="text" name="amount" value="1"></label>
+    <button type="submit">Add Bet</button>
+  </form>
+
+  {% if state.bets %}
+  <form hx-post="{{ url_for('roulette_spin') }}" hx-target="#game-panel" hx-swap="innerHTML">
+    <button type="submit">Spin</button>
+  </form>
+  {% endif %}
+  {% endif %}
+
+  {% if state.phase == 'resolved' %}
+  <form hx-post="{{ url_for('roulette_next') }}" hx-target="#game-panel" hx-swap="innerHTML">
+    <button type="submit">New Round</button>
+  </form>
+  {% endif %}
+</div>

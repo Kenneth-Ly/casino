@@ -4,8 +4,8 @@ import os
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, session
 
-from games import slots
-from web import blackjack_web, db, validation
+from games import roulette, slots
+from web import blackjack_web, db, roulette_web, validation
 
 load_dotenv()
 
@@ -189,3 +189,74 @@ def blackjack_action():
 def blackjack_next():
     session.pop("blackjack", None)
     return render_blackjack_table(get_balance(), None)
+
+
+def render_roulette_table(balance, state, error=None):
+    return render_template(
+        "_roulette_table.html",
+        balance=balance,
+        state=state,
+        error=error,
+        bet_menu=roulette.BET_MENU,
+    )
+
+
+@app.route("/roulette")
+def roulette_page():
+    return render_template(
+        "roulette.html",
+        balance=get_balance(),
+        state=session.get("roulette") or roulette_web.fresh_state(),
+        bet_menu=roulette.BET_MENU,
+    )
+
+
+@app.route("/roulette/bet", methods=["POST"])
+def roulette_bet():
+    balance = get_balance()
+    state = session.get("roulette") or roulette_web.fresh_state()
+
+    remaining = roulette_web.remaining_balance(state, balance)
+    amount, error = validation.validate_bet(request.form.get("amount", ""), remaining)
+    if error:
+        return render_roulette_table(balance, state, error=error)
+
+    bet_type = request.form.get("bet_type", "")
+    number = request.form.get("number", "")
+    state, error = roulette_web.add_bet(state, bet_type, number, amount)
+    session["roulette"] = state
+    return render_roulette_table(balance, state, error=error)
+
+
+@app.route("/roulette/remove", methods=["POST"])
+def roulette_remove():
+    balance = get_balance()
+    state = session.get("roulette") or roulette_web.fresh_state()
+
+    try:
+        index = int(request.form.get("index", ""))
+    except ValueError:
+        index = -1
+    state = roulette_web.remove_bet(state, index)
+    session["roulette"] = state
+    return render_roulette_table(balance, state)
+
+
+@app.route("/roulette/spin", methods=["POST"])
+def roulette_spin():
+    balance = get_balance()
+    state = session.get("roulette") or roulette_web.fresh_state()
+
+    state, total_wager, total_return = roulette_web.spin(state)
+    balance = balance - total_wager + total_return
+    session["balance"] = balance
+    session["roulette"] = state
+    if total_return:
+        _maybe_update_record(balance)
+    return render_roulette_table(balance, state)
+
+
+@app.route("/roulette/next", methods=["POST"])
+def roulette_next():
+    session["roulette"] = roulette_web.next_round()
+    return render_roulette_table(get_balance(), session["roulette"])

@@ -234,3 +234,31 @@ button:hover { box-shadow: 0 0 20px rgba(46, 124, 255, 0.7); }
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(51, 233, 255, 0.35), inset 0 0 0 3px var(--ink);
 }
 .card.back::after { content: "?"; color: var(--accent); text-shadow: 0 0 6px var(--accent); font-size: 22px; font-family: 'JetBrains Mono', monospace; }
+
+/* Roulette */
+.bet-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid rgba(51, 233, 255, 0.15);
+}
+.bet-line form { margin: 0; }
+.bet-win { color: var(--win); text-shadow: 0 0 6px rgba(57, 255, 106, 0.5); }
+.bet-lose { color: var(--marquee); text-shadow: 0 0 6px rgba(255, 77, 28, 0.5); }
+.result {
+  color: var(--accent);
+  text-shadow: 0 0 8px rgba(51, 233, 255, 0.5);
+  font-size: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+select {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--ink);
+  color: #E8E3F5;
+  border: 1px solid rgba(51, 233, 255, 0.35);
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+}
