@@ -25,6 +25,9 @@ def _valid_straight_number(raw):
 
 
 def add_bet(state, bet_type, number, amount):
+    if state["phase"] != "betting":
+        return state, None
+
     if bet_type not in BET_TYPES:
         return state, "Choose a valid bet type."
 

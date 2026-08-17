@@ -55,6 +55,18 @@ def test_add_bet_straight_invalid_number():
     assert state["bets"] == []
 
 
+def test_add_bet_wrong_phase_is_no_op(monkeypatch):
+    state = roulette_web.fresh_state()
+    roulette_web.add_bet(state, "red", "", 5)
+    monkeypatch.setattr(roulette_web.random, "choice", lambda seq: "18")
+    state, _, _ = roulette_web.spin(state)
+    assert state["phase"] == "resolved"
+    bets_before = list(state["bets"])
+    state, error = roulette_web.add_bet(state, "black", "", 3)
+    assert error is None
+    assert state["bets"] == bets_before
+
+
 def test_remove_bet_valid_index():
     state = roulette_web.fresh_state()
     roulette_web.add_bet(state, "red", "", 5)

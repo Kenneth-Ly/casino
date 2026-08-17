@@ -77,3 +77,13 @@ def test_remove_route_with_no_session_state_does_not_crash(monkeypatch):
     client = make_client(monkeypatch)
     resp = client.post("/roulette/remove", data={"index": "0"})
     assert resp.status_code == 200
+
+
+def test_bet_after_resolved_round_does_not_crash(monkeypatch):
+    client = make_client(monkeypatch)
+    client.get("/roulette")
+    client.post("/roulette/bet", data={"bet_type": "red", "number": "", "amount": "5"})
+    monkeypatch.setattr(roulette_web.random, "choice", lambda seq: "18")
+    client.post("/roulette/spin")
+    resp = client.post("/roulette/bet", data={"bet_type": "black", "number": "", "amount": "3"})
+    assert resp.status_code == 200
