@@ -1,5 +1,6 @@
 import cards
 from web import poker_web
+from games.poker import Player
 
 
 def test_start_table_creates_four_players_with_correct_seats():
@@ -131,3 +132,120 @@ def test_deal_new_hand_writes_back_stacks_to_table(monkeypatch):
     assert table["players"][1]["stack"] == 49
     assert table["players"][2]["stack"] == 48
     assert table["players"][3]["stack"] == 50
+
+
+def _make_players(n=4):
+    return [Player(name, 50, is_bot=(i != 0), personality=(["TAG", "LAG", "Station"][i - 1] if i != 0 else None))
+            for i, name in enumerate(["You", "Tex", "Lucy", "Cal"][:n])]
+
+
+def _make_hand(order, current_max_bet=0):
+    players = _make_players()
+    return players, {
+        "current_max_bet": current_max_bet,
+        "order": order,
+        "to_act": list(order),
+        "log": [],
+    }
+
+
+def test_run_betting_round_bots_check_around_empties_to_act(monkeypatch):
+    players, hand = _make_hand([1, 2, 3])
+    monkeypatch.setattr(poker_web, "bot_decide_action", lambda p, to_call, board, pot: ("check", 0))
+    poker_web._run_betting_round(players, hand, board=[])
+    assert hand["to_act"] == []
+    assert hand["log"] == ["Tex checks.", "Lucy checks.", "Cal checks."]
+    assert hand["current_max_bet"] == 0
+
+
+def test_run_betting_round_pauses_at_human_turn(monkeypatch):
+    players, hand = _make_hand([1, 0, 2])
+    monkeypatch.setattr(poker_web, "bot_decide_action", lambda p, to_call, board, pot: ("check", 0))
+    poker_web._run_betting_round(players, hand, board=[])
+    assert hand["to_act"] == [0, 2]  # Tex acted and was popped; stopped before touching the human
+    assert hand["log"] == ["Tex checks."]
+
+
+def test_run_betting_round_bot_raise_reopens_action(monkeypatch):
+    players, hand = _make_hand([1, 2, 3])
+
+    def decide(p, to_call, board, pot):
+        if p.name == "Tex":
+            return ("raise", p.current_bet + 10)
+        return ("check", 0)
+
+    monkeypatch.setattr(poker_web, "bot_decide_action", decide)
+    poker_web._run_betting_round(players, hand, board=[])
+    # Tex's raise must force Lucy and Cal (already "acted" this pass, but now
+    # facing a new bet) back onto the queue -- and the loop keeps draining
+    # until nobody owes a further decision.
+    assert hand["to_act"] == []
+    assert hand["current_max_bet"] == 10
+    assert hand["log"] == ["Tex raises to 10.", "Lucy checks.", "Cal checks."]
+
+
+def test_run_betting_round_stale_folded_entry_is_skipped(monkeypatch):
+    players, hand = _make_hand([1, 2, 3])
+    players[1].folded = True  # Tex already folded (e.g. from an earlier partial drain)
+    monkeypatch.setattr(poker_web, "bot_decide_action", lambda p, to_call, board, pot: ("check", 0))
+    poker_web._run_betting_round(players, hand, board=[])
+    assert hand["to_act"] == []
+    assert hand["log"] == ["Lucy checks.", "Cal checks."]
+
+
+def test_run_betting_round_stops_immediately_when_only_one_player_remains(monkeypatch):
+    players, hand = _make_hand([1, 2, 3])
+    calls = []
+
+    def decide(p, to_call, board, pot):
+        calls.append(p.name)
+        return ("fold", 0)
+
+    monkeypatch.setattr(poker_web, "bot_decide_action", decide)
+    players[0].folded = True  # human already folded before this drain started
+    poker_web._run_betting_round(players, hand, board=[])
+    # Tex folds -> Lucy and Cal (2) remain -- not done yet.
+    # Lucy folds -> only Cal (1) remains -- must stop immediately, Cal never asked to act.
+    assert hand["to_act"] == []
+    assert calls == ["Tex", "Lucy"]  # Cal never got a turn
+    assert players[3].folded is False  # Cal is the uncontested survivor
+
+
+def test_apply_human_action_fold():
+    players, hand = _make_hand([0, 1, 2])
+    poker_web.apply_human_action(players, hand, "fold", None)
+    assert players[0].folded is True
+    assert hand["to_act"] == [1, 2]
+
+
+def test_apply_human_action_check():
+    players, hand = _make_hand([0, 1, 2], current_max_bet=0)
+    poker_web.apply_human_action(players, hand, "check", None)
+    assert players[0].folded is False
+    assert players[0].current_bet == 0
+    assert hand["to_act"] == [1, 2]
+
+
+def test_apply_human_action_call():
+    players, hand = _make_hand([0, 1, 2], current_max_bet=6)
+    poker_web.apply_human_action(players, hand, "call", None)
+    assert players[0].current_bet == 6
+    assert players[0].stack == 44
+    assert hand["to_act"] == [1, 2]
+
+
+def test_apply_human_action_raise_reopens_action():
+    players, hand = _make_hand([0, 1, 2], current_max_bet=2)
+    poker_web.apply_human_action(players, hand, "raise", 10)
+    assert players[0].current_bet == 10
+    assert hand["current_max_bet"] == 10
+    assert hand["to_act"] == [1, 2]  # reset from order, excluding the raiser
+
+
+def test_apply_human_action_allin_computes_amount_serverside():
+    players, hand = _make_hand([0, 1, 2], current_max_bet=2)
+    poker_web.apply_human_action(players, hand, "allin", 999)  # client value must be ignored
+    assert players[0].current_bet == 50  # their full stack, not 999
+    assert players[0].stack == 0
+    assert players[0].all_in is True
+    assert hand["current_max_bet"] == 50

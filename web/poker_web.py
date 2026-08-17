@@ -1,6 +1,6 @@
 """Session-state glue between games/poker.py's pure logic and the Flask web app."""
 import cards
-from games.poker import Player, SMALL_BLIND, BIG_BLIND
+from games.poker import Player, SMALL_BLIND, BIG_BLIND, apply_action, bot_decide_action
 
 SEATS = [
     {"name": "You", "is_bot": False, "personality": None},
@@ -111,3 +111,71 @@ def deal_new_hand(table):
         "to_act": _to_act_from_order(order, players),
         "log": [],
     }
+
+
+def _log_bot_action(hand, name, action, amount):
+    if action == "fold":
+        hand["log"].append(f"{name} folds.")
+    elif action == "check":
+        hand["log"].append(f"{name} checks.")
+    elif action == "call":
+        hand["log"].append(f"{name} calls.")
+    elif action == "raise":
+        hand["log"].append(f"{name} raises to {amount}.")
+    elif action == "allin":
+        hand["log"].append(f"{name} goes all-in ({amount} pts)!")
+
+
+def _reset_to_act_after_raise(hand, players, actor_idx):
+    hand["to_act"] = [
+        j for j in hand["order"]
+        if j != actor_idx and not players[j].folded and not players[j].all_in
+    ]
+
+
+def _run_betting_round(players, hand, board):
+    while hand["to_act"]:
+        # Matches games/poker.py's betting_round(), which breaks out of its
+        # queue immediately once at most one player still has agency --
+        # nobody left who can respond to a bet. Checked before popping the
+        # next entry so a bot (or the human) is never asked to act on a hand
+        # that's already effectively over.
+        if sum(1 for p in players if not p.folded) <= 1:
+            hand["to_act"] = []
+            return
+
+        i = hand["to_act"][0]
+        p = players[i]
+
+        if p.folded or p.all_in:
+            hand["to_act"].pop(0)
+            continue
+
+        if i == 0:
+            return  # pause here -- it's the human's turn
+
+        hand["to_act"].pop(0)
+        to_call = hand["current_max_bet"] - p.current_bet
+        pot = sum(pl.total_committed for pl in players)
+        action, amount = bot_decide_action(p, to_call, board, pot)
+        new_max, raised = apply_action(p, action, amount, hand["current_max_bet"])
+        hand["current_max_bet"] = new_max
+        _log_bot_action(hand, p.name, action, amount)
+        if raised:
+            _reset_to_act_after_raise(hand, players, i)
+
+
+def apply_human_action(players, hand, action, amount):
+    """Applies players[0]'s decision. Caller guarantees it's actually their turn."""
+    p = players[0]
+    if action == "allin":
+        amount = p.current_bet + p.stack
+    elif action in ("fold", "check", "call"):
+        amount = 0
+    # action == "raise": amount is the caller-validated target, used as-is
+
+    hand["to_act"].pop(0)
+    new_max, raised = apply_action(p, action, amount, hand["current_max_bet"])
+    hand["current_max_bet"] = new_max
+    if raised:
+        _reset_to_act_after_raise(hand, players, 0)
