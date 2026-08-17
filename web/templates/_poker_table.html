@@ -1,0 +1,89 @@
+<div class="panel">
+  <p class="balance">Balance: {{ balance }} pts</p>
+
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  {% if not state %}
+  <form hx-post="{{ url_for('poker_buyin') }}" hx-target="#game-panel" hx-swap="innerHTML">
+    <label>Buy In (min 4): <input type="text" name="buy_in" value="50"></label>
+    <button type="submit">Buy In</button>
+  </form>
+
+  {% else %}
+  {% set hand = state.hand %}
+  {% set you = state.table.players[0] %}
+  {% set your_hand = hand.players[0] %}
+
+  <p class="pot">Pot: {{ hand.players|sum(attribute='total_committed') }} pts</p>
+
+  <div class="section-label">Board</div>
+  <div class="hand-row">
+    {% for c in hand.board %}
+    <div class="card {{ 'red' if is_red_suit(c[1]) else 'black' }}">
+      <div class="corner tl">{{ c[0] }}<br>{{ suit_symbol(c[1]) }}</div>
+    </div>
+    {% endfor %}
+    {% if not hand.board %}<span class="dim">(no community cards yet)</span>{% endif %}
+  </div>
+
+  {% if hand.log %}
+  <div class="section-label">Since your last turn</div>
+  <ul class="action-log">
+    {% for line in hand.log %}<li>{{ line }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  <div class="section-label">Table</div>
+  {% for p in state.table.players %}
+  {% set hp = hand.players[loop.index0] %}
+  <div class="seat">
+    {{ p.name }}{% if loop.index0 == 0 %} (you){% endif %}:
+    stack {{ p.stack }}
+    {% if hp.folded %} -- FOLDED
+    {% elif hp.all_in %} -- ALL-IN
+    {% else %} -- bet {{ hp.current_bet }}
+    {% endif %}
+    {% if hand.phase == 'player_turn' and hand.to_act and hand.to_act[0] == loop.index0 %} &lt;--{% endif %}
+    {% if hand.phase == 'resolved' and not hp.folded and loop.index0 != 0 %}
+      -- {% for c in hp.hole %}{{ c[0] }}{{ suit_symbol(c[1]) }} {% endfor %}
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <div class="section-label">Your hand</div>
+  <div class="hand-row">
+    {% for c in your_hand.hole %}
+    <div class="card {{ 'red' if is_red_suit(c[1]) else 'black' }}">
+      <div class="corner tl">{{ c[0] }}<br>{{ suit_symbol(c[1]) }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if hand.phase == 'player_turn' and hand.to_act and hand.to_act[0] == 0 %}
+  {% set to_call = hand.current_max_bet - your_hand.current_bet %}
+  <form hx-post="{{ url_for('poker_action') }}" hx-target="#game-panel" hx-swap="innerHTML">
+    {% if to_call <= 0 %}
+    <button type="submit" name="action" value="check">Check</button>
+    {% else %}
+    <button type="submit" name="action" value="fold">Fold</button>
+    <button type="submit" name="action" value="call">Call {{ to_call }}</button>
+    {% endif %}
+    <label>Raise to: <input type="text" name="amount"></label>
+    <button type="submit" name="action" value="raise">Raise</button>
+    <button type="submit" name="action" value="allin">All-In ({{ you.stack }})</button>
+  </form>
+  {% endif %}
+
+  {% if hand.phase == 'resolved' %}
+  <form hx-post="{{ url_for('poker_cashout') }}" hx-target="#game-panel" hx-swap="innerHTML" style="display:inline">
+    <button type="submit">Cash Out</button>
+  </form>
+  {% if you.stack > 0 %}
+  <form hx-post="{{ url_for('poker_next_hand') }}" hx-target="#game-panel" hx-swap="innerHTML" style="display:inline">
+    <button type="submit">Next Hand</button>
+  </form>
+  {% endif %}
+  {% endif %}
+
+  {% endif %}
+</div>

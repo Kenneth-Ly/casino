@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from flask import Flask, render_template, request, session
 
 from games import roulette, slots
-from web import blackjack_web, db, roulette_web, validation
+from web import blackjack_web, db, poker_web, roulette_web, validation
 
 load_dotenv()
 
@@ -272,3 +272,109 @@ def roulette_spin():
 def roulette_next():
     session["roulette"] = roulette_web.next_round()
     return render_roulette_table(get_balance(), session["roulette"])
+
+
+def render_poker_table(balance, state, error=None):
+    return render_template(
+        "_poker_table.html",
+        balance=balance,
+        state=state,
+        error=error,
+        suit_symbol=poker_web.suit_symbol,
+        is_red_suit=poker_web.is_red_suit,
+    )
+
+
+@app.route("/poker")
+def poker_page():
+    return render_template(
+        "poker.html",
+        balance=get_balance(),
+        state=session.get("poker"),
+        suit_symbol=poker_web.suit_symbol,
+        is_red_suit=poker_web.is_red_suit,
+    )
+
+
+@app.route("/poker/buyin", methods=["POST"])
+def poker_buyin():
+    balance = get_balance()
+    from games.poker import BIG_BLIND
+    amount, error = validation.validate_bet(request.form.get("buy_in", ""), balance, min_bet=BIG_BLIND * 2)
+    if error:
+        return render_poker_table(balance, None, error=error)
+
+    balance -= amount
+    table = poker_web.start_table(amount)
+    hand = poker_web.deal_new_hand(table)
+    state = poker_web.advance({"table": table, "hand": hand})
+    session["balance"] = balance
+    session["poker"] = state
+    return render_poker_table(balance, state)
+
+
+@app.route("/poker/action", methods=["POST"])
+def poker_action():
+    balance = get_balance()
+    state = session.get("poker")
+    if not state or state["hand"]["phase"] != "player_turn":
+        return render_poker_table(balance, state)
+    if not state["hand"]["to_act"] or state["hand"]["to_act"][0] != 0:
+        return render_poker_table(balance, state)
+
+    action = request.form.get("action", "")
+    hand = state["hand"]
+    human_current_bet = hand["players"][0]["current_bet"]
+    to_call = hand["current_max_bet"] - human_current_bet
+    stack = state["table"]["players"][0]["stack"]
+
+    if action not in ("fold", "check", "call", "raise", "allin"):
+        return render_poker_table(balance, state)
+
+    if action == "check" and to_call > 0:
+        return render_poker_table(balance, state, error="You must call or fold -- there's a bet to you.")
+
+    amount = None
+    if action == "raise":
+        min_t, max_t = poker_web.raise_bounds(human_current_bet, stack, to_call)
+        amount, error = poker_web.validate_raise_amount(request.form.get("amount", ""), min_t, max_t)
+        if error:
+            return render_poker_table(balance, state, error=error)
+
+    state = poker_web.advance(state, action, amount)
+    session["poker"] = state
+    return render_poker_table(balance, state)
+
+
+@app.route("/poker/next-hand", methods=["POST"])
+def poker_next_hand():
+    balance = get_balance()
+    state = session.get("poker")
+    if not state or state["hand"]["phase"] != "resolved":
+        return render_poker_table(balance, state)
+    if state["table"]["players"][0]["stack"] <= 0:
+        return render_poker_table(balance, state)
+
+    table = state["table"]
+    poker_web.rebuy_broke_bots(table)
+    table["button_idx"] = (table["button_idx"] + 1) % len(table["players"])
+    hand = poker_web.deal_new_hand(table)
+    state = poker_web.advance({"table": table, "hand": hand})
+    session["poker"] = state
+    return render_poker_table(balance, state)
+
+
+@app.route("/poker/cashout", methods=["POST"])
+def poker_cashout():
+    balance = get_balance()
+    state = session.get("poker")
+    if not state or state["hand"]["phase"] != "resolved":
+        return render_poker_table(balance, state)
+
+    payout = state["table"]["players"][0]["stack"]
+    balance += payout
+    session["balance"] = balance
+    session.pop("poker", None)
+    if payout:
+        _maybe_update_record(balance)
+    return render_poker_table(balance, None)

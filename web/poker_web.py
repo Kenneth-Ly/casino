@@ -287,3 +287,22 @@ def advance(state, action=None, amount=None):
 
     _write_back_state(state, players)
     return state
+
+
+def raise_bounds(current_bet, stack, to_call):
+    min_target = current_bet + to_call + BIG_BLIND
+    max_target = current_bet + stack
+    if min_target > max_target:
+        min_target = max_target
+    return min_target, max_target
+
+
+def validate_raise_amount(raw, min_target, max_target):
+    raw = (raw or "").strip()
+    error = f"Enter a whole number between {min_target} and {max_target}."
+    if not raw.isascii() or not raw.isdigit():
+        return None, error
+    amount = int(raw)
+    if not (min_target <= amount <= max_target):
+        return None, error
+    return amount, None

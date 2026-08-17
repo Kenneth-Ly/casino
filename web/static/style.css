@@ -262,3 +262,9 @@ select {
   border-radius: 4px;
   padding: 0.3rem 0.5rem;
 }
+
+/* Poker */
+.pot { color: var(--gold); text-shadow: 0 0 8px rgba(255, 193, 59, 0.5); font-weight: 700; }
+.dim { color: #E8E3F5; opacity: 0.5; font-size: 0.85rem; }
+.seat { color: #E8E3F5; font-size: 0.85rem; margin-bottom: 0.2rem; }
+.action-log { color: var(--accent); font-size: 0.85rem; margin: 0.4rem 0; padding-left: 1.2rem; }
