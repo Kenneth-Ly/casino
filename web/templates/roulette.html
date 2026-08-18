@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Roulette</h1>
+<a class="back-link" href="{{ url_for('lobby') }}">&larr; Main Menu</a>
 <div id="game-panel">
   {% include "_roulette_table.html" %}
 </div>

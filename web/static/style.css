@@ -49,6 +49,17 @@ h1 {
   margin-bottom: 1rem;
 }
 
+.back-link {
+  display: block;
+  text-align: center;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  margin: -0.5rem 0 1.2rem;
+}
+.back-link:hover { text-decoration: underline; }
+
 button, input[type="text"] {
   font-family: 'JetBrains Mono', monospace;
 }
